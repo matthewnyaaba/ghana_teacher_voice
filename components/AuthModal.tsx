@@ -29,18 +29,9 @@ export function AuthModal({ onClose, onLogin }: AuthModalProps) {
     setError('');
 
     try {
-      // For demo purposes, simulate API call
+    
       await new Promise(resolve => setTimeout(resolve, 1000));
 
-      // In production, replace with actual API call:
-      // const endpoint = isLogin ? '/auth/login' : '/auth/register';
-      // const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}${endpoint}`, {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify(formData)
-      // });
-
-      // Simulate successful login/register
       const userData: User = {
         id: Math.random().toString(36).substr(2, 9),
         name: isLogin ? 'Test User' : formData.name,
@@ -52,7 +43,7 @@ export function AuthModal({ onClose, onLogin }: AuthModalProps) {
         year: parseInt(formData.year)
       };
 
-      // Simulate token storage
+ 
       localStorage.setItem('token', 'demo-token-' + Date.now());
       onLogin(userData);
 
