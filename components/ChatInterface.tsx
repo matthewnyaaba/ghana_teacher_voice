@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from 'react';
-import { User } from '@/app/page';
+import { User } from '@/lib/constants';
 
 interface Message {
   id: string;
@@ -347,7 +347,7 @@ export function ChatInterface({ user }: { user: User }) {
   );
 }
 
-// Helper Components
+
 function TutorCard({ name, description, icon, active = false }: any) {
   return (
     <div className={`p-4 rounded-lg mb-3 cursor-pointer transition-all ${
