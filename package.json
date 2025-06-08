@@ -11,7 +11,7 @@
   "dependencies": {
     "@livekit/components-react": "^2.0.0",
     "@livekit/components-styles": "^1.0.0",
-    "livekit-client": "^1.15.0",
+    "livekit-client": "^2.13.1",  // ← This is the fix!
     "next": "14.1.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
