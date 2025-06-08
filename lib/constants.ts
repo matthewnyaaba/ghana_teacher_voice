@@ -45,3 +45,42 @@ export interface User {
   program?: string;
   year?: number;
 }
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: 'student' | 'teacher' | 'admin';
+  institution: string;
+  institutionType: 'college' | 'university';
+  program?: string;
+  year?: number;
+}
+
+export interface CustomGPT {
+  id: string;
+  name: string;
+  description: string;
+  instructions: string;
+  createdBy: string;
+  creatorName: string;
+  institution: string;
+  passcode?: string;
+  isPublic: boolean;
+  category: 'curriculum' | 'teaching' | 'research' | 'general';
+  icon: string;
+  sharedWith: string[]; // user IDs
+  createdAt: Date;
+}
+
+export interface StudyGroup {
+  id: string;
+  name: string;
+  description: string;
+  institution: string;
+  members: string[];
+  admins: string[];
+  customGPTs: string[]; // GPT IDs
+  passcode: string;
+  createdAt: Date;
+}
