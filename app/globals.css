@@ -7,13 +7,14 @@
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
   }
-
+  
   * {
-    @apply border-border;
+    border-color: theme('colors.gray.200');
   }
   
   body {
-    @apply bg-background text-foreground;
+    background-color: rgb(255 255 255);
+    color: rgb(17 24 39);
   }
 }
 
@@ -24,15 +25,16 @@
 }
 
 ::-webkit-scrollbar-track {
-  @apply bg-gray-100;
+  background-color: rgb(243 244 246);
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-gray-400 rounded-full;
+  background-color: rgb(156 163 175);
+  border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  @apply bg-gray-500;
+  background-color: rgb(107 114 128);
 }
 
 /* Loading animation */
