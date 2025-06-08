@@ -134,7 +134,7 @@ export default function Home() {
 
       {/* Main Chat Interface - LiveKit Playground Style */}
       <main className="flex-1">
-        <ChatInterface user={user} />
+      {user && <ChatInterface user={user} />}
       </main>
     </div>
   );
