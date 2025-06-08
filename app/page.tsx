@@ -125,8 +125,8 @@ export default function Home() {
             </div>
             
             <div className="flex items-center gap-4">
-              <InstitutionBadge user={user} />
-              <UserMenu user={user} onLogout={handleLogout} />
+              {user && <InstitutionBadge user={user} />}
+              {user && <UserMenu user={user} onLogout={handleLogout} />}
             </div>
           </div>
         </div>
@@ -134,7 +134,7 @@ export default function Home() {
 
       {/* Main Chat Interface - LiveKit Playground Style */}
       <main className="flex-1">
-      {user && <ChatInterface user={user} />}
+        {user && <ChatInterface user={user} />}
       </main>
     </div>
   );
