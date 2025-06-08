@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from 'react';
-import { GHANA_COLLEGES, GHANA_UNIVERSITIES, User } from '@/app/page';
+import { GHANA_COLLEGES, GHANA_UNIVERSITIES, User } from '@/lib/constants';
 
 interface AuthModalProps {
   onClose: () => void;
