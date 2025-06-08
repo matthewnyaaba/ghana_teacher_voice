@@ -1,9 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Enable React Strict Mode
   reactStrictMode: true,
-  
-  // Handle LiveKit WebRTC requirements
   webpack: (config) => {
     config.resolve.fallback = {
       ...config.resolve.fallback,
@@ -11,22 +8,13 @@ const nextConfig = {
     };
     return config;
   },
-
-  // Image domains if you need to load images from external sources
   images: {
-    domains: [
-      'localhost',
-      // Add your Railway domain here if loading images
-    ],
+    domains: ['localhost'],
   },
-
-  // Environment variables that should be available on the client
   env: {
     NEXT_PUBLIC_LIVEKIT_URL: process.env.NEXT_PUBLIC_LIVEKIT_URL,
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
   },
-
-  // Headers for CORS if needed
   async headers() {
     return [
       {
