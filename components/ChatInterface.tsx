@@ -27,6 +27,7 @@ export function ChatInterface({ user, customGPT, systemInstructions }: ChatInter
   const [isConnecting, setIsConnecting] = useState(false);
   const [connected, setConnected] = useState(false);
   const [isVoiceActive, setIsVoiceActive] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Initialize with custom GPT greeting
@@ -36,7 +37,7 @@ export function ChatInterface({ user, customGPT, systemInstructions }: ChatInter
       role: 'assistant',
       content: customGPT 
         ? `Hello ${user.name}! I'm ${customGPT.name}, created by ${customGPT.teacherProfile?.name || customGPT.creatorName}. ${customGPT.description} How can I help you today?`
-        : `Welcome ${user.name}! I'm your AI learning assistant. How can I help you with your studies today?`,
+        : `Welcome ${user.name}! I'm your AI learning assistant for Ghana's B.Ed curriculum. I have deep knowledge of all courses, teaching methods, and educational policies. How can I help you today?`,
       timestamp: new Date(),
     };
     setMessages([welcomeMessage]);
@@ -69,8 +70,16 @@ export function ChatInterface({ user, customGPT, systemInstructions }: ChatInter
         const data = await response.json();
         setConnected(true);
         setIsVoiceActive(true);
-        // Here you would initialize LiveKit with the token
-        // Example: initializeLiveKit(data.token, data.url, data.room);
+        
+        // TODO: Initialize LiveKit connection here
+        console.log('LiveKit token received:', data.token);
+        console.log('Connect to:', data.url);
+        
+        // In production, you would:
+        // 1. Import LiveKit client SDK
+        // 2. Create room connection
+        // 3. Handle audio streams
+        
       }
     } catch (error) {
       console.error('Connection failed:', error);
@@ -81,7 +90,7 @@ export function ChatInterface({ user, customGPT, systemInstructions }: ChatInter
   };
 
   const handleSendMessage = async () => {
-    if (!inputMessage.trim()) return;
+    if (!inputMessage.trim() || isLoading) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -92,29 +101,73 @@ export function ChatInterface({ user, customGPT, systemInstructions }: ChatInter
 
     setMessages(prev => [...prev, userMessage]);
     setInputMessage('');
+    setIsLoading(true);
 
-    // Simulate AI response (in production, this would call your API)
-    setTimeout(() => {
+    try {
+      // REAL API CALL to your Python backend
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: inputMessage,
+          user_role: user.role,
+          user_program: user.program,
+          user_year: user.year,
+          custom_gpt_id: customGPT?.id,
+          custom_instructions: customGPT?.enhancedInstructions || systemInstructions,
+          conversation_history: messages.slice(-10), // Send last 10 messages for context
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to get response');
+      }
+
+      const data = await response.json();
+      
       const aiResponse: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: getAIResponse(inputMessage),
+        content: data.response || data.message || "I understand your question. Let me help you with that based on Ghana's B.Ed curriculum...",
         timestamp: new Date(),
         metadata: {
-          webSearch: inputMessage.toLowerCase().includes('search'),
+          webSearch: data.used_web_search || false,
           curriculum: true,
-          model: 'GPT-4',
+          model: data.model || 'GPT-4',
         },
       };
+      
       setMessages(prev => [...prev, aiResponse]);
-    }, 1000);
-  };
+    } catch (error) {
+      console.error('Error getting AI response:', error);
+      
+      // Fallback response with curriculum knowledge
+      const fallbackResponse: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: `I apologize, but I'm having trouble connecting to the server. However, I can still help you with Ghana's B.Ed curriculum. 
 
-  const getAIResponse = (message: string): string => {
-    if (customGPT) {
-      return `[As ${customGPT.teacherProfile?.name || customGPT.name}] Based on our ${customGPT.category} focus, here's my guidance on that...`;
+Based on your question about "${inputMessage}", here's what I know:
+
+For B.Ed students, the curriculum includes:
+- Year 1: Foundation courses (EPS 111, PFC 111, LIT 111, NUM 111)
+- Year 2: Subject specialization and teaching methods
+- Year 3: Extended teaching practice (12 weeks)
+- Year 4: Action research and advanced specialization
+
+Please try again or ask me about specific courses, teaching methods, or curriculum requirements.`,
+        timestamp: new Date(),
+        metadata: {
+          curriculum: true,
+          model: 'Offline Mode',
+        },
+      };
+      setMessages(prev => [...prev, fallbackResponse]);
+    } finally {
+      setIsLoading(false);
     }
-    return "Let me help you understand that better. Based on Ghana's B.Ed curriculum...";
   };
 
   return (
@@ -134,18 +187,18 @@ export function ChatInterface({ user, customGPT, systemInstructions }: ChatInter
                 />
               ) : (
                 <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center text-xl">
-                  {customGPT?.icon || '🤖'}
+                  {customGPT?.icon || '🎓'}
                 </div>
               )}
               
               <div>
                 <h2 className="text-lg font-bold text-gray-800">
-                  {customGPT?.name || 'AI Learning Assistant'}
+                  {customGPT?.name || 'Ghana B.Ed Curriculum Assistant'}
                 </h2>
                 <p className="text-sm text-gray-600">
                   {customGPT?.teacherProfile 
                     ? `${customGPT.teacherProfile.name} • ${customGPT.teacherProfile.title}`
-                    : 'General Curriculum Guide'
+                    : 'Powered by Ghana Education Service Standards'
                   }
                 </p>
               </div>
@@ -251,6 +304,19 @@ export function ChatInterface({ user, customGPT, systemInstructions }: ChatInter
               </div>
             </div>
           ))}
+          
+          {isLoading && (
+            <div className="flex justify-start">
+              <div className="bg-white border shadow-sm p-4 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <div className="animate-bounce">●</div>
+                  <div className="animate-bounce delay-100">●</div>
+                  <div className="animate-bounce delay-200">●</div>
+                </div>
+              </div>
+            </div>
+          )}
+          
           <div ref={messagesEndRef} />
         </div>
 
@@ -261,13 +327,14 @@ export function ChatInterface({ user, customGPT, systemInstructions }: ChatInter
               type="text"
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+              onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
               placeholder={
                 connected 
                   ? "Speak or type your message..." 
-                  : "Type a message or start voice chat..."
+                  : "Ask about curriculum, courses, teaching methods..."
               }
               className="flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={isLoading}
             />
             
             {isVoiceActive && (
@@ -285,17 +352,17 @@ export function ChatInterface({ user, customGPT, systemInstructions }: ChatInter
             
             <button
               onClick={handleSendMessage}
-              disabled={!inputMessage.trim()}
+              disabled={!inputMessage.trim() || isLoading}
               className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
             >
-              Send
+              {isLoading ? 'Sending...' : 'Send'}
             </button>
           </div>
           
           <p className="text-xs text-gray-500 mt-2">
             {customGPT 
               ? `Specialized in ${customGPT.category}. Ask questions related to the course materials.`
-              : 'Ask about any topic in the Ghana B.Ed curriculum'
+              : 'Ask about B.Ed curriculum, course codes (e.g., EPS 111), teaching practice, or assessment methods'
             }
           </p>
         </div>
@@ -329,6 +396,44 @@ export function ChatInterface({ user, customGPT, systemInstructions }: ChatInter
             </div>
           </div>
 
+          {/* Curriculum Quick Reference */}
+          <div>
+            <h3 className="font-bold text-gray-800 mb-3">📚 Quick Reference</h3>
+            <div className="space-y-2 text-sm">
+              <details className="group">
+                <summary className="cursor-pointer hover:text-blue-600">Year 1 Courses</summary>
+                <div className="ml-4 mt-2 text-gray-600">
+                  <p className="font-medium">Semester 1:</p>
+                  <ul className="ml-2">
+                    <li>• EPS 111: Educational Psychology</li>
+                    <li>• PFC 111: Professional Practice</li>
+                    <li>• LIT 111: Literacy Studies I</li>
+                    <li>• NUM 111: Numeracy & Problem Solving</li>
+                  </ul>
+                  <p className="font-medium mt-2">Semester 2:</p>
+                  <ul className="ml-2">
+                    <li>• EPS 121: Child Development</li>
+                    <li>• CUR 121: Curriculum Studies</li>
+                    <li>• ICT 121: Educational Technology</li>
+                    <li>• STS 121: School Experience I</li>
+                  </ul>
+                </div>
+              </details>
+              
+              <details className="group">
+                <summary className="cursor-pointer hover:text-blue-600">Teaching Practice</summary>
+                <div className="ml-4 mt-2 text-gray-600">
+                  <ul>
+                    <li>• Year 1: 1 week observation</li>
+                    <li>• Year 2: 4 weeks assisted</li>
+                    <li>• Year 3: 12 weeks off-campus</li>
+                    <li>• Year 4: 6 weeks independent</li>
+                  </ul>
+                </div>
+              </details>
+            </div>
+          </div>
+
           {/* AI Assistant Info */}
           {customGPT && (
             <div>
@@ -358,9 +463,10 @@ export function ChatInterface({ user, customGPT, systemInstructions }: ChatInter
           <div>
             <h3 className="font-bold text-gray-800 mb-3">💡 Tips</h3>
             <ul className="space-y-2 text-sm text-gray-600">
-              <li>• Click "Start Voice Chat" to speak naturally</li>
-              <li>• Reference course materials in your questions</li>
-              <li>• Ask for examples from Ghanaian context</li>
+              <li>• Ask about specific course codes</li>
+              <li>• Request lesson plan templates</li>
+              <li>• Get help with assignments</li>
+              <li>• Learn about assessment methods</li>
               {customGPT && <li>• This AI uses {customGPT.teacherProfile?.name || 'the teacher'}'s teaching style</li>}
             </ul>
           </div>
