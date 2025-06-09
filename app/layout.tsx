@@ -7,7 +7,7 @@ const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
   title: 'GenAITEd Ghana - AI-Powered Teacher Education',
-  description: 'Voice-enabled learning platform for Ghana\'s teacher education system. Supporting 47 Colleges of Education and 7 Universities.',
+  description: 'Voice-enabled learning platform for Ghana education',
 }
 
 export default function RootLayout({
