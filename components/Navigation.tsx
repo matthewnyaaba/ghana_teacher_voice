@@ -10,13 +10,14 @@ export function Navigation() {
   const pathname = usePathname();
   const [user, setUser] = useState<User | null>(null);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
 
   useEffect(() => {
     const storedUser = localStorage.getItem('user');
     if (storedUser) {
       setUser(JSON.parse(storedUser));
     }
-  }, [pathname]); // Re-check user on route change
+  }, [pathname]);
 
   const handleLogout = () => {
     localStorage.clear();
@@ -127,37 +128,23 @@ export function Navigation() {
                 </button>
               </div>
             )}
+
+            {/* Mobile Menu Button */}
+            <button
+              onClick={() => setShowMobileMenu(!showMobileMenu)}
+              className="md:hidden p-2 text-gray-600 hover:text-gray-900"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
           </div>
         </div>
       </div>
 
       {/* Mobile Navigation */}
-      <MobileNav user={user} navItems={navItems} onLogout={handleLogout} />
-    </header>
-  );
-}
-
-function MobileNav({ user, navItems, onLogout }: { 
-  user: User | null; 
-  navItems: any[]; 
-  onLogout: () => void;
-}) {
-  const [showMobileMenu, setShowMobileMenu] = useState(false);
-  const pathname = usePathname();
-
-  return (
-    <div className="md:hidden">
-      <button
-        onClick={() => setShowMobileMenu(!showMobileMenu)}
-        className="p-2 text-gray-600 hover:text-gray-900"
-      >
-        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-        </svg>
-      </button>
-
       {showMobileMenu && (
-        <div className="absolute top-16 left-0 right-0 bg-white border-b shadow-lg">
+        <div className="md:hidden absolute top-16 left-0 right-0 bg-white border-b shadow-lg">
           <nav className="px-4 py-2">
             {navItems
               .filter(item => item.public || user)
@@ -178,7 +165,7 @@ function MobileNav({ user, navItems, onLogout }: {
             {user && (
               <button
                 onClick={() => {
-                  onLogout();
+                  handleLogout();
                   setShowMobileMenu(false);
                 }}
                 className="block w-full text-left py-2 text-sm text-red-600 font-medium"
@@ -189,7 +176,7 @@ function MobileNav({ user, navItems, onLogout }: {
           </nav>
         </div>
       )}
-    </div>
+    </header>
   );
 }
 
