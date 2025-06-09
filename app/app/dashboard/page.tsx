@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { User, CustomGPT, StudyGroup } from '@/lib/constants';
 import { CreateGPTModal } from '@/components/CreateGPTModal';
+import { supabase } from '@/lib/supabase';
 
 export default function Dashboard() {
   const router = useRouter();
@@ -14,6 +15,7 @@ export default function Dashboard() {
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [joinCode, setJoinCode] = useState('');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const storedUser = localStorage.getItem('user');
@@ -21,127 +23,186 @@ export default function Dashboard() {
       router.push('/');
       return;
     }
-    setUser(JSON.parse(storedUser));
-    loadCustomGPTs();
-    loadStudyGroups();
+    const userData = JSON.parse(storedUser);
+    setUser(userData);
+    loadData(userData.id);
   }, [router]);
 
-  const loadCustomGPTs = () => {
-    const storedGPTs = localStorage.getItem('customGPTs');
-    if (storedGPTs) {
-      setCustomGPTs(JSON.parse(storedGPTs));
-    } else {
-      // Initialize with default curriculum GPTs
-      const defaultGPTs: CustomGPT[] = [
-        {
-          id: 'curriculum-1',
-          name: 'B.Ed General Curriculum Guide',
-          description: 'Complete guide for all B.Ed programs',
-          instructions: 'Help students navigate the B.Ed curriculum',
-          createdBy: 'system',
-          creatorName: 'GenAITEd Ghana',
-          institution: 'All Institutions',
-          isPublic: true,
-          category: 'curriculum',
-          icon: '📚',
-          sharedWith: [],
-          createdAt: new Date(),
+  const loadData = async (userId: string) => {
+    setLoading(true);
+    try {
+      // Load custom GPTs
+      const { data: gpts, error: gptsError } = await supabase
+        .from('custom_gpts')
+        .select('*')
+        .or(`created_by.eq.${userId},is_public.eq.true`);
+
+      if (!gptsError && gpts) {
+        setCustomGPTs(gpts);
+      }
+
+      // Load study groups
+      const { data: memberData, error: memberError } = await supabase
+        .from('group_members')
+        .select('group_id')
+        .eq('user_id', userId);
+
+      if (!memberError && memberData) {
+        const groupIds = memberData.map(m => m.group_id);
+        if (groupIds.length > 0) {
+          const { data: groups, error: groupsError } = await supabase
+            .from('study_groups')
+            .select('*')
+            .in('id', groupIds);
+
+          if (!groupsError && groups) {
+            setStudyGroups(groups);
+          }
         }
-      ];
-      localStorage.setItem('customGPTs', JSON.stringify(defaultGPTs));
-      setCustomGPTs(defaultGPTs);
+      }
+    } catch (error) {
+      console.error('Error loading data:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const loadStudyGroups = () => {
-    const storedGroups = localStorage.getItem('studyGroups');
-    if (storedGroups) {
-      setStudyGroups(JSON.parse(storedGroups));
-    }
-  };
+  const joinWithCode = async () => {
+    if (!user) return;
 
-  const joinWithCode = () => {
-    // Try to join a Custom GPT (class)
-    const gpt = customGPTs.find(g => g.passcode === joinCode);
-    if (gpt) {
-      if (!gpt.sharedWith.includes(user?.id || '')) {
-        gpt.sharedWith.push(user?.id || '');
-        localStorage.setItem('customGPTs', JSON.stringify(customGPTs));
+    try {
+      // Try to find a Custom GPT with this passcode
+      const { data: gpt, error: gptError } = await supabase
+        .from('custom_gpts')
+        .select('*')
+        .eq('passcode', joinCode)
+        .single();
+
+      if (gpt && !gptError) {
         alert(`Successfully joined class: ${gpt.name}`);
-      } else {
-        alert('You are already in this class!');
+        setJoinCode('');
+        setShowJoinModal(false);
+        loadData(user.id);
+        return;
       }
-      setJoinCode('');
-      setShowJoinModal(false);
-      loadCustomGPTs();
-      return;
-    }
 
-    // Try to join a Study Group
-    const group = studyGroups.find(g => g.passcode === joinCode);
-    if (group) {
-      if (!group.members.includes(user?.id || '')) {
-        group.members.push(user?.id || '');
-        localStorage.setItem('studyGroups', JSON.stringify(studyGroups));
-        alert(`Successfully joined group: ${group.name}`);
-      } else {
-        alert('You are already in this group!');
+      // Try to find a Study Group with this passcode
+      const { data: group, error: groupError } = await supabase
+        .from('study_groups')
+        .select('*')
+        .eq('passcode', joinCode)
+        .single();
+
+      if (group && !groupError) {
+        // Add user to group
+        const { error: joinError } = await supabase
+          .from('group_members')
+          .insert({
+            group_id: group.id,
+            user_id: user.id,
+            is_admin: false
+          });
+
+        if (!joinError) {
+          alert(`Successfully joined group: ${group.name}`);
+          setJoinCode('');
+          setShowJoinModal(false);
+          loadData(user.id);
+          return;
+        }
       }
-      setJoinCode('');
-      setShowJoinModal(false);
-      loadStudyGroups();
-      return;
+
+      alert('Invalid join code!');
+    } catch (error) {
+      console.error('Error joining:', error);
+      alert('Error joining. Please try again.');
     }
-
-    alert('Invalid join code!');
   };
 
-  const createStudyGroup = (groupData: Partial<StudyGroup>) => {
-    const newGroup: StudyGroup = {
-      id: Date.now().toString(),
-      name: groupData.name || '',
-      description: groupData.description || '',
-      institution: user?.institution || '',
-      members: [user?.id || ''],
-      admins: [user?.id || ''],
-      customGPTs: [],
-      passcode: generatePasscode(),
-      createdAt: new Date(),
-      program: user?.program,
-      year: user?.year,
-      semester: groupData.semester || 1,
-    };
+  const createStudyGroup = async (groupData: Partial<StudyGroup>) => {
+    if (!user) return;
 
-    const updatedGroups = [...studyGroups, newGroup];
-    localStorage.setItem('studyGroups', JSON.stringify(updatedGroups));
-    setStudyGroups(updatedGroups);
-    setShowCreateGroup(false);
+    try {
+      const passcode = Math.random().toString(36).substring(2, 8).toUpperCase();
+      
+      // Create the group
+      const { data: newGroup, error: groupError } = await supabase
+        .from('study_groups')
+        .insert({
+          name: groupData.name,
+          description: groupData.description,
+          institution: user.institution,
+          passcode: passcode,
+          program: user.program,
+          year: user.year,
+          created_by: user.id
+        })
+        .select()
+        .single();
+
+      if (groupError) throw groupError;
+
+      // Add creator as admin member
+      const { error: memberError } = await supabase
+        .from('group_members')
+        .insert({
+          group_id: newGroup.id,
+          user_id: user.id,
+          is_admin: true
+        });
+
+      if (memberError) throw memberError;
+
+      setShowCreateGroup(false);
+      loadData(user.id);
+    } catch (error) {
+      console.error('Error creating group:', error);
+      alert('Failed to create group. Please try again.');
+    }
   };
 
-  const generatePasscode = () => {
-    return Math.random().toString(36).substring(2, 8).toUpperCase();
+  const createCustomGPT = async (gptData: Partial<CustomGPT>) => {
+    if (!user) return;
+
+    try {
+      const passcode = Math.random().toString(36).substring(2, 8).toUpperCase();
+      
+      const { data: newGPT, error } = await supabase
+        .from('custom_gpts')
+        .insert({
+          ...gptData,
+          created_by: user.id,
+          creator_name: user.name,
+          institution: user.institution,
+          passcode: passcode,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setShowCreateGPT(false);
+      loadData(user.id);
+    } catch (error) {
+      console.error('Error creating GPT:', error);
+      alert('Failed to create AI assistant. Please try again.');
+    }
   };
 
-  // Filter GPTs and Groups based on user access
+  if (!user || loading) {
+    return (
+      <div className="min-h-[calc(100vh-64px)] flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  // Filter GPTs based on access
   const myGPTs = customGPTs.filter(gpt => 
-    gpt.isPublic || 
-    gpt.createdBy === user?.id || 
-    gpt.sharedWith.includes(user?.id || '') ||
-    (gpt.institution === user?.institution && gpt.category === 'curriculum')
+    gpt.is_public || 
+    gpt.created_by === user.id ||
+    gpt.institution === user.institution
   );
-
-  const myGroups = studyGroups.filter(group => 
-    group.members.includes(user?.id || '')
-  );
-
-  const availableGroups = studyGroups.filter(group => 
-    group.institution === user?.institution &&
-    group.program === user?.program &&
-    group.year === user?.year &&
-    !group.members.includes(user?.id || '')
-  );
-
-  if (!user) return null;
 
   return (
     <div className="min-h-[calc(100vh-64px)] bg-gray-50">
@@ -197,19 +258,20 @@ export default function Dashboard() {
               <div key={gpt.id} className="border rounded-lg p-4 hover:shadow-md">
                 <div className="flex items-start justify-between mb-2">
                   <span className="text-2xl">{gpt.icon}</span>
-                  <div className="flex gap-2">
-                    {gpt.passcode && (
-                      <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">
-                        Code: {gpt.passcode}
-                      </span>
-                    )}
-                  </div>
+                  {gpt.passcode && (
+                    <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">
+                      Code: {gpt.passcode}
+                    </span>
+                  )}
                 </div>
                 <h3 className="font-medium text-gray-800 mb-1">{gpt.name}</h3>
                 <p className="text-sm text-gray-600 mb-3">{gpt.description}</p>
-                <p className="text-xs text-gray-500 mb-3">By {gpt.creatorName}</p>
+                <p className="text-xs text-gray-500 mb-3">By {gpt.creator_name}</p>
                 <button
-                  onClick={() => router.push(`/chat?gpt=${gpt.id}`)}
+                  onClick={() => {
+                    localStorage.setItem('selectedGPT', JSON.stringify(gpt));
+                    router.push('/chat');
+                  }}
                   className="w-full py-2 bg-blue-50 text-blue-600 rounded hover:bg-blue-100"
                 >
                   Enter Class
@@ -223,54 +285,28 @@ export default function Dashboard() {
         <div className="bg-white rounded-lg shadow p-6 mb-6">
           <h2 className="text-xl font-bold text-gray-800 mb-4">My Study Groups</h2>
           <div className="grid md:grid-cols-2 gap-4">
-            {myGroups.map(group => (
+            {studyGroups.map(group => (
               <div key={group.id} className="border rounded-lg p-4">
                 <h3 className="font-medium text-gray-800 mb-2">{group.name}</h3>
                 <p className="text-sm text-gray-600 mb-3">{group.description}</p>
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-500">{group.members.length} members</span>
-                  <div className="flex gap-2">
-                    <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
-                      Code: {group.passcode}
-                    </span>
-                    <button
-                      onClick={() => router.push(`/groups/${group.id}`)}
-                      className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700"
-                    >
-                      Open
-                    </button>
-                  </div>
+                  <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
+                    Code: {group.passcode}
+                  </span>
+                  <button
+                    onClick={() => {
+                      localStorage.setItem('selectedGroup', JSON.stringify(group));
+                      router.push('/groups');
+                    }}
+                    className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700"
+                  >
+                    Open
+                  </button>
                 </div>
               </div>
             ))}
           </div>
         </div>
-
-        {/* Available Groups in Same Program/Year */}
-        {user.role === 'student' && availableGroups.length > 0 && (
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-bold text-gray-800 mb-4">
-              Available Groups in {user.program} - Year {user.year}
-            </h2>
-            <div className="grid md:grid-cols-2 gap-4">
-              {availableGroups.map(group => (
-                <div key={group.id} className="border rounded-lg p-4">
-                  <h3 className="font-medium text-gray-800 mb-2">{group.name}</h3>
-                  <p className="text-sm text-gray-600 mb-3">{group.description}</p>
-                  <button
-                    onClick={() => {
-                      setJoinCode(group.passcode);
-                      joinWithCode();
-                    }}
-                    className="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
-                  >
-                    Join Group
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Join Modal */}
@@ -311,7 +347,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Create Study Group Modal (Students only) */}
+      {/* Create Study Group Modal */}
       {showCreateGroup && user.role === 'student' && (
         <CreateStudyGroupModal
           user={user}
@@ -320,26 +356,11 @@ export default function Dashboard() {
         />
       )}
 
-      {/* Create Custom GPT Modal (Teachers/Admins only) */}
+      {/* Create Custom GPT Modal */}
       {showCreateGPT && (user.role === 'teacher' || user.role === 'admin') && (
         <CreateGPTModal
           onClose={() => setShowCreateGPT(false)}
-          onCreate={(gptData) => {
-            const newGPT: CustomGPT = {
-              id: Date.now().toString(),
-              ...gptData as CustomGPT,
-              createdBy: user?.id || '',
-              creatorName: user?.name || '',
-              institution: user?.institution || '',
-              passcode: generatePasscode(),
-              sharedWith: [],
-              createdAt: new Date(),
-            };
-            const updatedGPTs = [...customGPTs, newGPT];
-            localStorage.setItem('customGPTs', JSON.stringify(updatedGPTs));
-            setCustomGPTs(updatedGPTs);
-            setShowCreateGPT(false);
-          }}
+          onCreate={createCustomGPT}
           userProfile={{
             id: user.id,
             name: user.name,
