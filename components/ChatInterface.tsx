@@ -28,6 +28,7 @@ export function ChatInterface({ user, customGPT, systemInstructions }: ChatInter
   const [connected, setConnected] = useState(false);
   const [isVoiceActive, setIsVoiceActive] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Initialize with custom GPT greeting
@@ -47,6 +48,12 @@ export function ChatInterface({ user, customGPT, systemInstructions }: ChatInter
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  const toggleVoiceRecording = () => {
+    setIsRecording(!isRecording);
+    // Voice recording logic will be added later
+    console.log('Voice recording:', !isRecording);
+  };
 
   const connectToVoice = async () => {
     setIsConnecting(true);
@@ -71,15 +78,8 @@ export function ChatInterface({ user, customGPT, systemInstructions }: ChatInter
         setConnected(true);
         setIsVoiceActive(true);
         
-        // TODO: Initialize LiveKit connection here
         console.log('LiveKit token received:', data.token);
         console.log('Connect to:', data.url);
-        
-        // In production, you would:
-        // 1. Import LiveKit client SDK
-        // 2. Create room connection
-        // 3. Handle audio streams
-        
       }
     } catch (error) {
       console.error('Connection failed:', error);
@@ -104,7 +104,13 @@ export function ChatInterface({ user, customGPT, systemInstructions }: ChatInter
     setIsLoading(true);
 
     try {
-      // REAL API CALL to your Python backend
+      console.log('Sending to backend:', {
+        message: inputMessage,
+        user_id: user.id,
+        user_role: user.role,
+        api_url: process.env.NEXT_PUBLIC_API_URL
+      });
+
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/chat`, {
         method: 'POST',
         headers: {
@@ -112,59 +118,56 @@ export function ChatInterface({ user, customGPT, systemInstructions }: ChatInter
         },
         body: JSON.stringify({
           message: inputMessage,
+          user_id: user.id, // IMPORTANT: Include user.id
           user_role: user.role,
           user_program: user.program,
           user_year: user.year,
           custom_gpt_id: customGPT?.id,
           custom_instructions: customGPT?.enhancedInstructions || systemInstructions,
-          conversation_history: messages.slice(-10), // Send last 10 messages for context
+          conversation_history: messages.slice(-5).map(m => ({
+            role: m.role,
+            content: m.content
+          }))
         }),
       });
 
+      console.log('Response status:', response.status);
+
       if (!response.ok) {
-        throw new Error('Failed to get response');
+        const errorText = await response.text();
+        console.error('API Error:', errorText);
+        throw new Error(`Failed to get response: ${response.status}`);
       }
 
       const data = await response.json();
+      console.log('AI response:', data);
       
       const aiResponse: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: data.response || data.message || "I understand your question. Let me help you with that based on Ghana's B.Ed curriculum...",
+        content: data.response || 'Sorry, I could not generate a response.',
         timestamp: new Date(),
         metadata: {
           webSearch: data.used_web_search || false,
-          curriculum: true,
-          model: data.model || 'GPT-4',
+          curriculum: data.curriculum_context || true,
+          model: data.model || 'gpt-4',
         },
       };
       
       setMessages(prev => [...prev, aiResponse]);
     } catch (error) {
-      console.error('Error getting AI response:', error);
+      console.error('Chat error:', error);
       
-      // Fallback response with curriculum knowledge
-      const fallbackResponse: Message = {
+      const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: `I apologize, but I'm having trouble connecting to the server. However, I can still help you with Ghana's B.Ed curriculum. 
-
-Based on your question about "${inputMessage}", here's what I know:
-
-For B.Ed students, the curriculum includes:
-- Year 1: Foundation courses (EPS 111, PFC 111, LIT 111, NUM 111)
-- Year 2: Subject specialization and teaching methods
-- Year 3: Extended teaching practice (12 weeks)
-- Year 4: Action research and advanced specialization
-
-Please try again or ask me about specific courses, teaching methods, or curriculum requirements.`,
+        content: 'Sorry, I encountered an error connecting to the server. Please check your internet connection and try again.',
         timestamp: new Date(),
         metadata: {
-          curriculum: true,
-          model: 'Offline Mode',
+          model: 'Error',
         },
       };
-      setMessages(prev => [...prev, fallbackResponse]);
+      setMessages(prev => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
     }
@@ -323,6 +326,17 @@ Please try again or ask me about specific courses, teaching methods, or curricul
         {/* Input Area */}
         <div className="bg-white border-t p-4">
           <div className="flex gap-2">
+            <button
+              onClick={toggleVoiceRecording}
+              className={`px-4 py-2 rounded-lg ${
+                isRecording 
+                  ? 'bg-red-600 text-white hover:bg-red-700' 
+                  : 'bg-gray-100 hover:bg-gray-200'
+              }`}
+            >
+              {isRecording ? '🔴'}
+            </button>
+            
             <input
               type="text"
               value={inputMessage}
@@ -334,21 +348,8 @@ Please try again or ask me about specific courses, teaching methods, or curricul
                   : "Ask about curriculum, courses, teaching methods..."
               }
               className="flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              disabled={isLoading}
+              disabled={isLoading || isRecording}
             />
-            
-            {isVoiceActive && (
-              <button
-                onClick={() => setIsVoiceActive(!isVoiceActive)}
-                className={`px-4 py-2 rounded-lg ${
-                  isVoiceActive 
-                    ? 'bg-red-600 text-white hover:bg-red-700' 
-                    : 'bg-gray-100 hover:bg-gray-200'
-                }`}
-              >
-                {isVoiceActive ? '⏹' : '🎤'}
-              </button>
-            )}
             
             <button
               onClick={handleSendMessage}
