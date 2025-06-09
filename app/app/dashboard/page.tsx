@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { User, CustomGPT, StudyGroup } from '@/lib/constants';
+import { CreateGPTModal } from '@/components/CreateGPTModal';
 
 export default function Dashboard() {
   const router = useRouter();
@@ -326,16 +327,11 @@ export default function Dashboard() {
           onCreate={(gptData) => {
             const newGPT: CustomGPT = {
               id: Date.now().toString(),
-              name: gptData.name || '',
-              description: gptData.description || '',
-              instructions: gptData.instructions || '',
+              ...gptData as CustomGPT,
               createdBy: user?.id || '',
               creatorName: user?.name || '',
               institution: user?.institution || '',
               passcode: generatePasscode(),
-              isPublic: gptData.isPublic || false,
-              category: gptData.category || 'general',
-              icon: gptData.icon || '🤖',
               sharedWith: [],
               createdAt: new Date(),
             };
@@ -343,6 +339,12 @@ export default function Dashboard() {
             localStorage.setItem('customGPTs', JSON.stringify(updatedGPTs));
             setCustomGPTs(updatedGPTs);
             setShowCreateGPT(false);
+          }}
+          userProfile={{
+            id: user.id,
+            name: user.name,
+            institution: user.institution,
+            title: user.role === 'teacher' ? 'Teacher' : 'Administrator'
           }}
         />
       )}
@@ -421,5 +423,3 @@ function CreateStudyGroupModal({ user, onClose, onCreate }: {
     </div>
   );
 }
-
-// Keep the existing CreateGPTModal component...
