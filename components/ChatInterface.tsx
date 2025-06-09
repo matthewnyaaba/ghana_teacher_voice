@@ -58,7 +58,8 @@ export function ChatInterface({ user, customGPT, systemInstructions }: ChatInter
   const connectToVoice = async () => {
     setIsConnecting(true);
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/token`, {
+      // HARDCODED URL
+      const response = await fetch('https://voice-agent-python-production.up.railway.app/token', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -108,10 +109,10 @@ export function ChatInterface({ user, customGPT, systemInstructions }: ChatInter
         message: inputMessage,
         user_id: user.id,
         user_role: user.role,
-        api_url: process.env.NEXT_PUBLIC_API_URL
       });
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/chat`, {
+      // HARDCODED URL
+      const response = await fetch('https://voice-agent-python-production.up.railway.app/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -334,7 +335,7 @@ export function ChatInterface({ user, customGPT, systemInstructions }: ChatInter
                   : 'bg-gray-100 hover:bg-gray-200'
               }`}
             >
-              {isRecording ? '🔴'}
+              {isRecording ? '🔴' : '🎤'}
             </button>
             
             <input
