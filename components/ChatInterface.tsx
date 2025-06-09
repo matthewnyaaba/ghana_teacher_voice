@@ -58,7 +58,7 @@ export function ChatInterface({ user, customGPT, systemInstructions }: ChatInter
   const connectToVoice = async () => {
     setIsConnecting(true);
     try {
-      // HARDCODED URL
+      // HARDCODED URL - Railway handles port automatically
       const response = await fetch('https://voice-agent-python-production.up.railway.app/token', {
         method: 'POST',
         headers: {
@@ -111,7 +111,7 @@ export function ChatInterface({ user, customGPT, systemInstructions }: ChatInter
         user_role: user.role,
       });
 
-      // HARDCODED URL
+      // HARDCODED URL - Railway handles port automatically
       const response = await fetch('https://voice-agent-python-production.up.railway.app/chat', {
         method: 'POST',
         headers: {
