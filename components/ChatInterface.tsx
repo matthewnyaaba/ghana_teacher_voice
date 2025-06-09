@@ -1,7 +1,13 @@
 "use client";
 
 import { useState, useEffect, useRef } from 'react';
-import { User } from '@/lib/constants';
+import { User, CustomGPT } from '@/lib/constants';
+
+interface ChatInterfaceProps {
+  user: User;
+  customGPT?: CustomGPT | null;
+  systemInstructions?: string;
+}
 
 interface Message {
   id: string;
@@ -15,48 +21,64 @@ interface Message {
   };
 }
 
-export function ChatInterface({ user }: { user: User }) {
+export function ChatInterface({ user, customGPT, systemInstructions }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isConnecting, setIsConnecting] = useState(false);
   const [connected, setConnected] = useState(false);
-  const [selectedTutor, setSelectedTutor] = useState('general');
-  const [language, setLanguage] = useState('English');
-  const [showCustomTutorModal, setShowCustomTutorModal] = useState(false);
+  const [isVoiceActive, setIsVoiceActive] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // AI Tutors
-  const tutors = [
-    { id: 'curriculum', name: 'Curriculum Explorer', icon: '🎓', description: 'Ghana B.Ed curriculum guide' },
-    { id: 'methods', name: 'Teaching Methods', icon: '👩‍🏫', description: 'Best practices for classroom' },
-    { id: 'subject', name: 'Subject Specialist', icon: '📚', description: 'Deep dive into subjects' },
-    { id: 'research', name: 'Research Assistant', icon: '🔬', description: 'Latest educational research' },
-  ];
-
-  // Quick Actions
-  const quickActions = [
-    { id: 'curriculum', icon: '📖', label: 'View Curriculum', action: () => handleQuickAction('curriculum') },
-    { id: 'progress', icon: '📊', label: 'My Progress', action: () => handleQuickAction('progress') },
-    { id: 'groups', icon: '👥', label: 'Study Groups', action: () => handleQuickAction('groups') },
-    { id: 'notes', icon: '📝', label: 'Take Notes', action: () => handleQuickAction('notes') },
-    { id: 'help', icon: '❓', label: 'Help & Support', action: () => handleQuickAction('help') },
-  ];
-
-  // Initialize with welcome message
+  // Initialize with custom GPT greeting
   useEffect(() => {
     const welcomeMessage: Message = {
       id: '1',
       role: 'assistant',
-      content: `Welcome ${user.name}! I'm your AI learning assistant. How can I help you today?`,
+      content: customGPT 
+        ? `Hello ${user.name}! I'm ${customGPT.name}, created by ${customGPT.teacherProfile?.name || customGPT.creatorName}. ${customGPT.description} How can I help you today?`
+        : `Welcome ${user.name}! I'm your AI learning assistant. How can I help you with your studies today?`,
       timestamp: new Date(),
     };
     setMessages([welcomeMessage]);
-  }, [user.name]);
+  }, [user.name, customGPT]);
 
   // Auto scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  const connectToVoice = async () => {
+    setIsConnecting(true);
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/token`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          room_name: `ghana-edu-${user.id}-${customGPT?.id || 'general'}`,
+          participant_name: user.name,
+          role: user.role,
+          institution: user.institution,
+          custom_gpt_id: customGPT?.id,
+          teacher_profile: customGPT?.teacherProfile,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setConnected(true);
+        setIsVoiceActive(true);
+        // Here you would initialize LiveKit with the token
+        // Example: initializeLiveKit(data.token, data.url, data.room);
+      }
+    } catch (error) {
+      console.error('Connection failed:', error);
+      alert('Failed to connect to voice. Please check your connection.');
+    } finally {
+      setIsConnecting(false);
+    }
+  };
 
   const handleSendMessage = async () => {
     if (!inputMessage.trim()) return;
@@ -71,16 +93,16 @@ export function ChatInterface({ user }: { user: User }) {
     setMessages(prev => [...prev, userMessage]);
     setInputMessage('');
 
-    // Simulate AI response (replace with actual API call)
+    // Simulate AI response (in production, this would call your API)
     setTimeout(() => {
       const aiResponse: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: getAIResponse(inputMessage, selectedTutor),
+        content: getAIResponse(inputMessage),
         timestamp: new Date(),
         metadata: {
           webSearch: inputMessage.toLowerCase().includes('search'),
-          curriculum: selectedTutor === 'curriculum',
+          curriculum: true,
           model: 'GPT-4',
         },
       };
@@ -88,126 +110,99 @@ export function ChatInterface({ user }: { user: User }) {
     }, 1000);
   };
 
-  const getAIResponse = (message: string, tutor: string): string => {
-    // Simulate different responses based on tutor
-    const responses: Record<string, string> = {
-      curriculum: "Based on the Ghana B.Ed curriculum, here's what you need to know...",
-      methods: "For effective teaching methods in Ghanaian classrooms, consider...",
-      subject: "Let me help you understand this subject better...",
-      research: "According to recent educational research in Ghana...",
-      general: "I'd be happy to help you with that. Let me explain...",
-    };
-    return responses[tutor] || responses.general;
-  };
-
-  const handleQuickAction = (action: string) => {
-    const actionMessages: Record<string, string> = {
-      curriculum: "Here's your B.Ed curriculum overview...",
-      progress: "Your learning progress: 65% complete this semester...",
-      groups: "Available study groups in your institution...",
-      notes: "Opening note-taking interface...",
-      help: "How can I assist you today?",
-    };
-    
-    const actionMessage: Message = {
-      id: Date.now().toString(),
-      role: 'assistant',
-      content: actionMessages[action] || "Feature coming soon!",
-      timestamp: new Date(),
-    };
-    setMessages(prev => [...prev, actionMessage]);
-  };
-
-  const connectToVoice = async () => {
-    setIsConnecting(true);
-    try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/token`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          room_name: `ghana-edu-${user.id}`,
-          participant_name: user.name,
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setConnected(true);
-        // Here you would initialize LiveKit with the token
-      }
-    } catch (error) {
-      console.error('Connection failed:', error);
-    } finally {
-      setIsConnecting(false);
+  const getAIResponse = (message: string): string => {
+    if (customGPT) {
+      return `[As ${customGPT.teacherProfile?.name || customGPT.name}] Based on our ${customGPT.category} focus, here's my guidance on that...`;
     }
+    return "Let me help you understand that better. Based on Ghana's B.Ed curriculum...";
   };
 
   return (
-    <div className="flex h-screen bg-gray-50">
-      {/* Left Sidebar - AI Tutors */}
-      <div className="w-64 bg-white border-r p-4 overflow-y-auto">
-        <h3 className="font-bold text-gray-800 mb-4">AI Tutors</h3>
-        <div className="space-y-2">
-          {tutors.map(tutor => (
-            <button
-              key={tutor.id}
-              onClick={() => setSelectedTutor(tutor.id)}
-              className={`w-full p-3 rounded-lg text-left transition-colors ${
-                selectedTutor === tutor.id 
-                  ? 'bg-blue-50 border-blue-300 border' 
-                  : 'hover:bg-gray-50'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <span className="text-2xl">{tutor.icon}</span>
-                <div>
-                  <div className="font-medium">{tutor.name}</div>
-                  <div className="text-xs text-gray-600">{tutor.description}</div>
-                </div>
-              </div>
-            </button>
-          ))}
-          <button
-            onClick={() => setShowCustomTutorModal(true)}
-            className="w-full p-3 rounded-lg text-left hover:bg-gray-50 border-2 border-dashed border-gray-300"
-          >
-            <div className="text-center text-gray-600">
-              + Create Custom Tutor
-            </div>
-          </button>
-        </div>
-      </div>
-
+    <div className="flex h-[calc(100vh-64px)] bg-gray-50">
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col">
-        {/* Header */}
+        {/* Chat Header */}
         <div className="bg-white border-b p-4">
           <div className="flex justify-between items-center">
-            <div>
-              <h2 className="text-xl font-bold">AI Learning Assistant</h2>
-              <p className="text-sm text-gray-600">
-                Voice-enabled • Web search active • {user.institution}
-              </p>
-            </div>
             <div className="flex items-center gap-4">
-              <select
-                value={language}
-                onChange={(e) => setLanguage(e.target.value)}
-                className="px-3 py-1 border rounded-lg text-sm"
-              >
-                <option>English</option>
-                <option>Twi</option>
-                <option>Ga</option>
-                <option>Ewe</option>
-                <option>Dagbani</option>
-              </select>
-              <span className="text-sm px-3 py-1 bg-green-100 text-green-800 rounded-full">
-                Connected
-              </span>
+              {/* Teacher Avatar */}
+              {customGPT?.teacherProfile?.avatarUrl ? (
+                <img 
+                  src={customGPT.teacherProfile.avatarUrl} 
+                  alt={customGPT.teacherProfile.name}
+                  className="w-12 h-12 rounded-full object-cover"
+                />
+              ) : (
+                <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center text-xl">
+                  {customGPT?.icon || '🤖'}
+                </div>
+              )}
+              
+              <div>
+                <h2 className="text-lg font-bold text-gray-800">
+                  {customGPT?.name || 'AI Learning Assistant'}
+                </h2>
+                <p className="text-sm text-gray-600">
+                  {customGPT?.teacherProfile 
+                    ? `${customGPT.teacherProfile.name} • ${customGPT.teacherProfile.title}`
+                    : 'General Curriculum Guide'
+                  }
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4">
+              {connected && (
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                  <span className="text-sm text-green-600">Voice Active</span>
+                </div>
+              )}
+              
+              {!connected && (
+                <button
+                  onClick={connectToVoice}
+                  disabled={isConnecting}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+                >
+                  {isConnecting ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+                      Connecting...
+                    </>
+                  ) : (
+                    <>
+                      🎤 Start Voice Chat
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           </div>
+
+          {/* Supporting Documents */}
+          {customGPT?.supportingDocuments && customGPT.supportingDocuments.length > 0 && (
+            <div className="mt-3 pt-3 border-t">
+              <details className="group">
+                <summary className="cursor-pointer text-sm text-gray-600 hover:text-gray-800">
+                  📚 Course Materials ({customGPT.supportingDocuments.length} files)
+                </summary>
+                <div className="mt-2 space-y-1">
+                  {customGPT.supportingDocuments.map((doc, idx) => (
+                    
+                      key={idx}
+                      href={doc.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block text-sm text-blue-600 hover:underline"
+                    >
+                      📄 {doc.name}
+                    </a>
+                  ))}
+                </div>
+              </details>
+            </div>
+          )}
         </div>
 
         {/* Messages */}
@@ -221,22 +216,36 @@ export function ChatInterface({ user }: { user: User }) {
                 className={`max-w-2xl p-4 rounded-lg ${
                   message.role === 'user'
                     ? 'bg-blue-600 text-white'
-                    : 'bg-white border'
+                    : 'bg-white border shadow-sm'
                 }`}
               >
                 {message.role === 'assistant' && (
                   <div className="flex items-center gap-2 mb-2">
-                    <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                      AI
-                    </div>
-                    <span className="font-medium">AI Assistant</span>
-                    {message.metadata?.webSearch && (
-                      <span className="text-xs bg-gray-100 px-2 py-1 rounded">🔍 Web Search</span>
+                    {customGPT?.teacherProfile?.avatarUrl ? (
+                      <img 
+                        src={customGPT.teacherProfile.avatarUrl} 
+                        alt="Teacher"
+                        className="w-6 h-6 rounded-full"
+                      />
+                    ) : (
+                      <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center text-xs">
+                        {customGPT?.icon || 'AI'}
+                      </div>
+                    )}
+                    <span className="font-medium text-gray-800">
+                      {customGPT?.teacherProfile?.name || 'AI Assistant'}
+                    </span>
+                    {message.metadata?.curriculum && (
+                      <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
+                        📚 Curriculum
+                      </span>
                     )}
                   </div>
                 )}
                 <p className="whitespace-pre-wrap">{message.content}</p>
-                <p className="text-xs mt-2 opacity-70">
+                <p className={`text-xs mt-2 ${
+                  message.role === 'user' ? 'text-blue-100' : 'text-gray-500'
+                }`}>
                   {message.timestamp.toLocaleTimeString()}
                 </p>
               </div>
@@ -253,82 +262,110 @@ export function ChatInterface({ user }: { user: User }) {
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-              placeholder="Type a message or use voice..."
+              placeholder={
+                connected 
+                  ? "Speak or type your message..." 
+                  : "Type a message or start voice chat..."
+              }
               className="flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-            <button
-              onClick={connectToVoice}
-              disabled={isConnecting}
-              className="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50"
-              title="Start voice conversation"
-            >
-              🎤
-            </button>
+            
+            {isVoiceActive && (
+              <button
+                onClick={() => setIsVoiceActive(!isVoiceActive)}
+                className={`px-4 py-2 rounded-lg ${
+                  isVoiceActive 
+                    ? 'bg-red-600 text-white hover:bg-red-700' 
+                    : 'bg-gray-100 hover:bg-gray-200'
+                }`}
+              >
+                {isVoiceActive ? '⏹' : '🎤'}
+              </button>
+            )}
+            
             <button
               onClick={handleSendMessage}
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              disabled={!inputMessage.trim()}
+              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
             >
               Send
             </button>
           </div>
+          
           <p className="text-xs text-gray-500 mt-2">
-            Tip: Say "search for latest..." to trigger web search, or ask about specific curriculum topics
+            {customGPT 
+              ? `Specialized in ${customGPT.category}. Ask questions related to the course materials.`
+              : 'Ask about any topic in the Ghana B.Ed curriculum'
+            }
           </p>
         </div>
       </div>
 
-      {/* Right Sidebar - Session Info & Quick Actions */}
+      {/* Right Sidebar - Session Info */}
       <div className="w-80 bg-white border-l p-4 overflow-y-auto">
-        <div className="mb-6">
-          <h3 className="font-bold text-gray-800 mb-3">Session Info</h3>
-          <div className="space-y-2 text-sm">
-            <div>
-              <span className="text-gray-600">Institution:</span>
-              <p className="font-medium">{user.institution}</p>
-            </div>
-            <div>
-              <span className="text-gray-600">Role:</span>
-              <p className="font-medium">{user.role}</p>
-            </div>
-            <div>
-              <span className="text-gray-600">Messages:</span>
-              <p className="font-medium">{messages.length}</p>
+        <div className="space-y-6">
+          {/* Session Info */}
+          <div>
+            <h3 className="font-bold text-gray-800 mb-3">Session Info</h3>
+            <div className="space-y-2 text-sm">
+              <div>
+                <span className="text-gray-600">Student:</span>
+                <p className="font-medium">{user.name}</p>
+              </div>
+              <div>
+                <span className="text-gray-600">Institution:</span>
+                <p className="font-medium">{user.institution}</p>
+              </div>
+              {user.program && (
+                <div>
+                  <span className="text-gray-600">Program:</span>
+                  <p className="font-medium">{user.program} • Year {user.year}</p>
+                </div>
+              )}
+              <div>
+                <span className="text-gray-600">Messages:</span>
+                <p className="font-medium">{messages.length}</p>
+              </div>
             </div>
           </div>
-        </div>
 
-        <div>
-          <h3 className="font-bold text-gray-800 mb-3">Quick Actions</h3>
-          <div className="space-y-2">
-            {quickActions.map(action => (
-              <button
-                key={action.id}
-                onClick={action.action}
-                className="w-full p-3 text-left hover:bg-gray-50 rounded-lg flex items-center gap-3"
-              >
-                <span className="text-xl">{action.icon}</span>
-                <span>{action.label}</span>
-              </button>
-            ))}
+          {/* AI Assistant Info */}
+          {customGPT && (
+            <div>
+              <h3 className="font-bold text-gray-800 mb-3">About This Assistant</h3>
+              <div className="space-y-3">
+                <p className="text-sm text-gray-600">{customGPT.description}</p>
+                
+                {customGPT.teacherProfile && (
+                  <div className="bg-gray-50 p-3 rounded-lg">
+                    <p className="text-xs font-medium text-gray-700 mb-1">Created by:</p>
+                    <p className="text-sm">{customGPT.teacherProfile.name}</p>
+                    <p className="text-xs text-gray-600">{customGPT.teacherProfile.title}</p>
+                  </div>
+                )}
+                
+                {customGPT.passcode && (
+                  <div className="bg-blue-50 p-3 rounded-lg">
+                    <p className="text-xs font-medium text-blue-700 mb-1">Share Code:</p>
+                    <p className="text-lg font-mono font-bold text-blue-900">{customGPT.passcode}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Quick Tips */}
+          <div>
+            <h3 className="font-bold text-gray-800 mb-3">💡 Tips</h3>
+            <ul className="space-y-2 text-sm text-gray-600">
+              <li>• Click "Start Voice Chat" to speak naturally</li>
+              <li>• Reference course materials in your questions</li>
+              <li>• Ask for examples from Ghanaian context</li>
+              {customGPT && <li>• This AI uses {customGPT.teacherProfile?.name || 'the teacher'}'s teaching style</li>}
+            </ul>
           </div>
         </div>
       </div>
-
-      {/* Custom Tutor Modal */}
-      {showCustomTutorModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full">
-            <h3 className="text-xl font-bold mb-4">Create Custom Tutor</h3>
-            <p className="text-gray-600 mb-4">Feature coming soon!</p>
-            <button
-              onClick={() => setShowCustomTutorModal(false)}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
