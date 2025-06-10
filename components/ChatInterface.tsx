@@ -3,6 +3,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { User, CustomGPT } from '@/lib/constants';
 
+// Base URL for backend API, injected via Vercel env var
+const API = process.env.NEXT_PUBLIC_API_URL!;
+
 interface ChatInterfaceProps {
   user: User;
   customGPT?: CustomGPT | null;
@@ -51,15 +54,14 @@ export function ChatInterface({ user, customGPT, systemInstructions }: ChatInter
 
   const toggleVoiceRecording = () => {
     setIsRecording(!isRecording);
-    // Voice recording logic will be added later
     console.log('Voice recording:', !isRecording);
   };
 
   const connectToVoice = async () => {
     setIsConnecting(true);
     try {
-      // HARDCODED URL - Railway handles port automatically
-      const response = await fetch('https://voice-agent-python-production.up.railway.app/token', {
+      console.log('🎤 Token request to:', `${API}/token`);
+      const response = await fetch(`${API}/token`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -78,9 +80,12 @@ export function ChatInterface({ user, customGPT, systemInstructions }: ChatInter
         const data = await response.json();
         setConnected(true);
         setIsVoiceActive(true);
-        
         console.log('LiveKit token received:', data.token);
         console.log('Connect to:', data.url);
+      } else {
+        const errorText = await response.text();
+        console.error('Token API error:', errorText);
+        throw new Error(`Token request failed: ${response.status}`);
       }
     } catch (error) {
       console.error('Connection failed:', error);
@@ -105,21 +110,15 @@ export function ChatInterface({ user, customGPT, systemInstructions }: ChatInter
     setIsLoading(true);
 
     try {
-      console.log('Sending to backend:', {
-        message: inputMessage,
-        user_id: user.id,
-        user_role: user.role,
-      });
-
-      // HARDCODED URL - Railway handles port automatically
-      const response = await fetch('https://voice-agent-python-production.up.railway.app/chat', {
+      console.log('✉️ Chat request to:', `${API}/chat`, { message: inputMessage });
+      const response = await fetch(`${API}/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           message: inputMessage,
-          user_id: user.id, // IMPORTANT: Include user.id
+          user_id: user.id,
           user_role: user.role,
           user_program: user.program,
           user_year: user.year,
@@ -128,11 +127,11 @@ export function ChatInterface({ user, customGPT, systemInstructions }: ChatInter
           conversation_history: messages.slice(-5).map(m => ({
             role: m.role,
             content: m.content
-          }))
+          })),
         }),
       });
 
-      console.log('Response status:', response.status);
+      console.log('📨 Response status:', response.status);
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -141,8 +140,8 @@ export function ChatInterface({ user, customGPT, systemInstructions }: ChatInter
       }
 
       const data = await response.json();
-      console.log('AI response:', data);
-      
+      console.log('🤖 AI replied:', data);
+
       const aiResponse: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
@@ -154,11 +153,10 @@ export function ChatInterface({ user, customGPT, systemInstructions }: ChatInter
           model: data.model || 'gpt-4',
         },
       };
-      
       setMessages(prev => [...prev, aiResponse]);
     } catch (error) {
       console.error('Chat error:', error);
-      
+
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
@@ -194,7 +192,6 @@ export function ChatInterface({ user, customGPT, systemInstructions }: ChatInter
                   {customGPT?.icon || '🎓'}
                 </div>
               )}
-              
               <div>
                 <h2 className="text-lg font-bold text-gray-800">
                   {customGPT?.name || 'Ghana B.Ed Curriculum Assistant'}
@@ -212,268 +209,4 @@ export function ChatInterface({ user, customGPT, systemInstructions }: ChatInter
               {connected && (
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                  <span className="text-sm text-green-600">Voice Active</span>
-                </div>
-              )}
-              
-              {!connected && (
-                <button
-                  onClick={connectToVoice}
-                  disabled={isConnecting}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
-                >
-                  {isConnecting ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
-                      Connecting...
-                    </>
-                  ) : (
-                    <>
-                      🎤 Start Voice Chat
-                    </>
-                  )}
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Supporting Documents */}
-          {customGPT?.supportingDocuments && customGPT.supportingDocuments.length > 0 && (
-            <div className="mt-3 pt-3 border-t">
-              <details className="group">
-                <summary className="cursor-pointer text-sm text-gray-600 hover:text-gray-800">
-                  📚 Course Materials ({customGPT.supportingDocuments.length} files)
-                </summary>
-                <div className="mt-2 space-y-1">
-                  {customGPT.supportingDocuments.map((doc, idx) => (
-                    
-                      key={idx}
-                      href={doc.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="block text-sm text-blue-600 hover:underline"
-                    >
-                      📄 {doc.name}
-                    </a>
-                  ))}
-                </div>
-              </details>
-            </div>
-          )}
-        </div>
-
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {messages.map(message => (
-            <div
-              key={message.id}
-              className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-            >
-              <div
-                className={`max-w-2xl p-4 rounded-lg ${
-                  message.role === 'user'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-white border shadow-sm'
-                }`}
-              >
-                {message.role === 'assistant' && (
-                  <div className="flex items-center gap-2 mb-2">
-                    {customGPT?.teacherProfile?.avatarUrl ? (
-                      <img 
-                        src={customGPT.teacherProfile.avatarUrl} 
-                        alt="Teacher"
-                        className="w-6 h-6 rounded-full"
-                      />
-                    ) : (
-                      <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center text-xs">
-                        {customGPT?.icon || 'AI'}
-                      </div>
-                    )}
-                    <span className="font-medium text-gray-800">
-                      {customGPT?.teacherProfile?.name || 'AI Assistant'}
-                    </span>
-                    {message.metadata?.curriculum && (
-                      <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
-                        📚 Curriculum
-                      </span>
-                    )}
-                  </div>
-                )}
-                <p className="whitespace-pre-wrap">{message.content}</p>
-                <p className={`text-xs mt-2 ${
-                  message.role === 'user' ? 'text-blue-100' : 'text-gray-500'
-                }`}>
-                  {message.timestamp.toLocaleTimeString()}
-                </p>
-              </div>
-            </div>
-          ))}
-          
-          {isLoading && (
-            <div className="flex justify-start">
-              <div className="bg-white border shadow-sm p-4 rounded-lg">
-                <div className="flex items-center gap-2">
-                  <div className="animate-bounce">●</div>
-                  <div className="animate-bounce delay-100">●</div>
-                  <div className="animate-bounce delay-200">●</div>
-                </div>
-              </div>
-            </div>
-          )}
-          
-          <div ref={messagesEndRef} />
-        </div>
-
-        {/* Input Area */}
-        <div className="bg-white border-t p-4">
-          <div className="flex gap-2">
-            <button
-              onClick={toggleVoiceRecording}
-              className={`px-4 py-2 rounded-lg ${
-                isRecording 
-                  ? 'bg-red-600 text-white hover:bg-red-700' 
-                  : 'bg-gray-100 hover:bg-gray-200'
-              }`}
-            >
-              {isRecording ? '🔴' : '🎤'}
-            </button>
-            
-            <input
-              type="text"
-              value={inputMessage}
-              onChange={(e) => setInputMessage(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
-              placeholder={
-                connected 
-                  ? "Speak or type your message..." 
-                  : "Ask about curriculum, courses, teaching methods..."
-              }
-              className="flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              disabled={isLoading || isRecording}
-            />
-            
-            <button
-              onClick={handleSendMessage}
-              disabled={!inputMessage.trim() || isLoading}
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-            >
-              {isLoading ? 'Sending...' : 'Send'}
-            </button>
-          </div>
-          
-          <p className="text-xs text-gray-500 mt-2">
-            {customGPT 
-              ? `Specialized in ${customGPT.category}. Ask questions related to the course materials.`
-              : 'Ask about B.Ed curriculum, course codes (e.g., EPS 111), teaching practice, or assessment methods'
-            }
-          </p>
-        </div>
-      </div>
-
-      {/* Right Sidebar - Session Info */}
-      <div className="w-80 bg-white border-l p-4 overflow-y-auto">
-        <div className="space-y-6">
-          {/* Session Info */}
-          <div>
-            <h3 className="font-bold text-gray-800 mb-3">Session Info</h3>
-            <div className="space-y-2 text-sm">
-              <div>
-                <span className="text-gray-600">Student:</span>
-                <p className="font-medium">{user.name}</p>
-              </div>
-              <div>
-                <span className="text-gray-600">Institution:</span>
-                <p className="font-medium">{user.institution}</p>
-              </div>
-              {user.program && (
-                <div>
-                  <span className="text-gray-600">Program:</span>
-                  <p className="font-medium">{user.program} • Year {user.year}</p>
-                </div>
-              )}
-              <div>
-                <span className="text-gray-600">Messages:</span>
-                <p className="font-medium">{messages.length}</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Curriculum Quick Reference */}
-          <div>
-            <h3 className="font-bold text-gray-800 mb-3">📚 Quick Reference</h3>
-            <div className="space-y-2 text-sm">
-              <details className="group">
-                <summary className="cursor-pointer hover:text-blue-600">Year 1 Courses</summary>
-                <div className="ml-4 mt-2 text-gray-600">
-                  <p className="font-medium">Semester 1:</p>
-                  <ul className="ml-2">
-                    <li>• EPS 111: Educational Psychology</li>
-                    <li>• PFC 111: Professional Practice</li>
-                    <li>• LIT 111: Literacy Studies I</li>
-                    <li>• NUM 111: Numeracy & Problem Solving</li>
-                  </ul>
-                  <p className="font-medium mt-2">Semester 2:</p>
-                  <ul className="ml-2">
-                    <li>• EPS 121: Child Development</li>
-                    <li>• CUR 121: Curriculum Studies</li>
-                    <li>• ICT 121: Educational Technology</li>
-                    <li>• STS 121: School Experience I</li>
-                  </ul>
-                </div>
-              </details>
-              
-              <details className="group">
-                <summary className="cursor-pointer hover:text-blue-600">Teaching Practice</summary>
-                <div className="ml-4 mt-2 text-gray-600">
-                  <ul>
-                    <li>• Year 1: 1 week observation</li>
-                    <li>• Year 2: 4 weeks assisted</li>
-                    <li>• Year 3: 12 weeks off-campus</li>
-                    <li>• Year 4: 6 weeks independent</li>
-                  </ul>
-                </div>
-              </details>
-            </div>
-          </div>
-
-          {/* AI Assistant Info */}
-          {customGPT && (
-            <div>
-              <h3 className="font-bold text-gray-800 mb-3">About This Assistant</h3>
-              <div className="space-y-3">
-                <p className="text-sm text-gray-600">{customGPT.description}</p>
-                
-                {customGPT.teacherProfile && (
-                  <div className="bg-gray-50 p-3 rounded-lg">
-                    <p className="text-xs font-medium text-gray-700 mb-1">Created by:</p>
-                    <p className="text-sm">{customGPT.teacherProfile.name}</p>
-                    <p className="text-xs text-gray-600">{customGPT.teacherProfile.title}</p>
-                  </div>
-                )}
-                
-                {customGPT.passcode && (
-                  <div className="bg-blue-50 p-3 rounded-lg">
-                    <p className="text-xs font-medium text-blue-700 mb-1">Share Code:</p>
-                    <p className="text-lg font-mono font-bold text-blue-900">{customGPT.passcode}</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Quick Tips */}
-          <div>
-            <h3 className="font-bold text-gray-800 mb-3">💡 Tips</h3>
-            <ul className="space-y-2 text-sm text-gray-600">
-              <li>• Ask about specific course codes</li>
-              <li>• Request lesson plan templates</li>
-              <li>• Get help with assignments</li>
-              <li>• Learn about assessment methods</li>
-              {customGPT && <li>• This AI uses {customGPT.teacherProfile?.name || 'the teacher'}'s teaching style</li>}
-            </ul>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
+                  <span className="text-sm text-green-600">
